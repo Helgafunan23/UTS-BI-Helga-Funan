@@ -152,7 +152,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{ border-radius:16px; }}
 .seg .rfm div {{ flex:1; background:#F1F6FB; border-radius:10px; padding:6px 8px; text-align:center; }}
 .seg .rfm b {{ display:block; font-size:15px; color:{NAVY}; }} .seg .rfm span {{ font-size:10.5px; color:#5B6B7F; }}
 
-.brandbar {{ font-weight:700; padding-top:8px; font-size:15px; color:{NAVY}; }}
+.brandbar {{ font-weight:700; font-size:14.5px; color:{NAVY}; background:#fff; border:1px solid #CFE6DA; border-radius:12px; padding:8px 14px; display:inline-block; box-shadow:0 3px 10px rgba(0,60,30,.14); }}
 
 /* ---------- BERANDA ---------- */
 .uhero {{ background:rgba(255,255,255,.94); border:1px solid #D6E4F2; border-radius:22px; padding:28px 32px; color:{NAVY};
@@ -161,7 +161,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{ border-radius:16px; }}
 .uhero .emoji {{ font-size:84px; }}
 .uhero h1 {{ margin:8px 0 4px 0; font-size:36px; color:{NAVY}; line-height:1.12; }}
 .uhero p {{ margin:0; color:#4A5B6E; font-size:16px; }}
-.sec-title {{ color:{NAVY}; font-size:22px; font-weight:800; margin:26px 0 10px 0; padding-left:12px; border-left:6px solid {GOLD}; }}
+.sec-title {{ color:{NAVY}; font-size:21px; font-weight:800; margin:28px 0 12px 0; padding:7px 18px; background:rgba(255,255,255,.96); border-left:7px solid {GOLD}; border-radius:12px; display:inline-block; box-shadow:0 4px 14px rgba(0,60,30,.18); }}
 .grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:14px; }}
 .glass {{ background:#fff; border:1px solid #E3E9F1; border-radius:18px; padding:18px 20px; color:#1D2B3A; box-shadow:0 5px 16px rgba(20,87,143,.09); border-top:5px solid {TEAL}; }}
 .glass.gold {{ border-top-color:{GOLD}; }} .glass.blue {{ border-top-color:{BLUE}; }} .glass.pink {{ border-top-color:{C['pink']}; }} .glass.purple {{ border-top-color:{C['purple']}; }}
@@ -170,7 +170,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{ border-radius:16px; }}
 .stat {{ background:#fff; border:1px solid #D6E4F2; border-radius:16px; padding:16px; text-align:center; color:{NAVY}; box-shadow:0 4px 12px rgba(20,87,143,.08); }}
 .stat .v {{ font-size:26px; font-weight:800; color:{BLUE}; }} .stat .l {{ font-size:13px; color:#5B6B7F; }}
 a.lnk {{ display:inline-block; background:{NAVY}; color:#fff !important; text-decoration:none; padding:8px 16px; border-radius:10px; font-weight:700; font-size:14px; margin:6px 8px 0 0; }}
-.foot {{ text-align:center; color:#6B7B8E; font-size:13px; margin:28px 0 6px 0; }}
+.foot {{ display:table; margin:28px auto 6px auto; background:rgba(255,255,255,.96); color:#3C5A4B; font-size:13px; padding:7px 18px; border-radius:999px; box-shadow:0 3px 10px rgba(0,60,30,.16); }}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -311,12 +311,15 @@ def get_foto():
 def bg_css(panel: bool):
     p = find_asset(["bg_unimor.jpg", "bg_unimor.jpeg", "bg_unimor.png", "bg_unimor.webp", "background.jpg", "background.png"])
     img = load_bg(str(p), p.stat().st_mtime) if p else None
-    ov = "linear-gradient(135deg, rgba(246,250,254,.94) 0%, rgba(235,244,251,.92) 55%, rgba(232,246,246,.90) 100%)"
-    bg = f'{ov}, url("{img}")' if img else "linear-gradient(135deg, #F6FAFE 0%, #EAF3FA 55%, #E8F6F6 100%)"
+    ov = ("radial-gradient(circle at 12% 18%, rgba(255,255,255,.30) 0, rgba(255,255,255,0) 38%), "
+          "radial-gradient(circle at 88% 82%, rgba(255,255,255,.24) 0, rgba(255,255,255,0) 40%), "
+          "radial-gradient(circle at 80% 10%, rgba(242,183,5,.20) 0, rgba(242,183,5,0) 30%), "
+          "linear-gradient(135deg, #0A6B43 0%, #129457 42%, #2DB87C 78%, #5FD3A0 100%)")
+    bg = ov  # hijau polos agar warnanya jelas (gambar background tidak dipakai)
     css = f".stApp {{ background:{bg}; background-size:cover; background-position:center; background-attachment:fixed; }}"
     if panel:  # halaman analisis: isi dalam panel putih agar grafik terbaca jelas
         css += (".block-container { background:#FFFFFF; border:1px solid #E3E9F1; border-radius:24px; margin-top:14px; margin-bottom:14px;"
-                " padding:1.2rem 2rem 2rem 2rem !important; box-shadow:0 10px 34px rgba(20,87,143,.12); }")
+                " padding:1.2rem 2rem 2rem 2rem !important; box-shadow:0 14px 40px rgba(0,40,20,.30); }")
     return f"<style>{css}</style>"
 
 
@@ -336,7 +339,7 @@ st.session_state.setdefault("page", "beranda")
 LOGIN_CSS = f"""
 <style>
 .block-container {{ padding-top:2.2rem; max-width:1100px; }}
-.lg-brand {{ text-align:center; margin-bottom:14px; }}
+.lg-brand {{ text-align:center; margin-bottom:14px; background:rgba(255,255,255,.96); border-radius:18px; padding:14px 16px; box-shadow:0 8px 22px rgba(0,60,30,.20); }}
 .lg-brand .badge {{ background:{GOLD}; color:{NAVY}; font-weight:800; letter-spacing:1px; padding:4px 14px;
     border-radius:999px; font-size:12px; display:inline-block; }}
 .lg-brand h2 {{ color:{NAVY}; margin:10px 0 2px 0; font-size:28px; line-height:1.15; }}
@@ -355,9 +358,9 @@ LOGIN_CSS = f"""
 div[data-testid="stForm"] {{ background:#fff; border:1px solid #D6E4F2; border-top:none; border-radius:0 0 22px 22px;
     padding:6px 24px 20px 24px; box-shadow:0 12px 32px rgba(20,87,143,.14); }}
 div[data-testid="stForm"] label p {{ font-weight:700; color:{NAVY}; }}
-.lg-hint {{ text-align:center; margin-top:14px; color:#4A5B6E; font-size:12.5px; }}
+.lg-hint {{ text-align:center; margin:14px auto 0 auto; width:fit-content; background:rgba(255,255,255,.96); color:#3C5A4B; font-size:12.5px; padding:6px 16px; border-radius:999px; box-shadow:0 3px 10px rgba(0,60,30,.16); }}
 .lg-hint code {{ background:#FFF3C4; color:#6B4E00; padding:2px 8px; border-radius:8px; font-size:12px; }}
-.lg-foot {{ text-align:center; color:#6B7B8E; font-size:12px; margin-top:18px; }}
+.lg-foot {{ text-align:center; margin:14px auto 0 auto; width:fit-content; background:rgba(255,255,255,.90); color:#3C5A4B; font-size:12px; padding:5px 14px; border-radius:999px; }}
 </style>
 """
 
