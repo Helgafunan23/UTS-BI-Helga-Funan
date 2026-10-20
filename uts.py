@@ -2,12 +2,14 @@
 UTS BUSINESS INTELLIGENCE - ANALISIS TRANSAKSI TOKO (EDA, PREPROCESSING, APRIORI, K-MEANS, DASHBOARD BI)
 Universitas Timor (UNIMOR)
 
-Alur: Beranda -> (upload Excel) -> 1 Business Understanding -> 2 EDA -> 3 Preprocessing & Feature Engineering
+Alur: LOGIN -> Beranda -> (upload Excel) -> 1 Business Understanding -> 2 EDA -> 3 Preprocessing & Feature Engineering
       -> 4 Apriori -> 5 K-Means (RFM) -> 6 Dashboard BI -> 7 Rekomendasi Keputusan
 
 Jalankan:
     pip install streamlit pandas numpy plotly openpyxl pillow
     streamlit run app_uts_bi_tokotoko.py
+
+Login : username = helga | password = helga123  (ubah di bagian AUTH_USER / AUTH_PASS)
 
 Data: "P8__UTS_Business_Intelligence.xlsx" (sheet Data_Raw, Data_Produk, Data_Pelanggan).
  - Jika file ini diletakkan di folder yang SAMA dengan program, data dibaca otomatis.
@@ -17,6 +19,7 @@ Aset opsional (folder yang sama): bg_unimor.jpg (background), logo_unimor.png (l
 Semua algoritma (Apriori, K-Means, Silhouette) ditulis dengan numpy/pandas sehingga tanpa scikit-learn / mlxtend.
 """
 import base64
+import hmac
 import io
 import itertools
 from pathlib import Path
@@ -48,6 +51,12 @@ UNIMOR_FAKULTAS = [
 ]
 
 # ----------------------------------------------------------------------------
+# AKUN LOGIN (ubah di sini)
+# ----------------------------------------------------------------------------
+AUTH_USER = "helga"
+AUTH_PASS = "helga123"
+
+# ----------------------------------------------------------------------------
 # WARNA  (tema UNIMOR + palet khusus agar tiap grafik berbeda warna)
 # ----------------------------------------------------------------------------
 NAVY, BLUE, TEAL, GOLD, LIGHT = "#0B2A4A", "#14578F", "#1D9AA6", "#F2B705", "#F4F7FB"
@@ -67,65 +76,101 @@ BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "
 
 CSS = f"""
 <style>
+:root, html, body, .stApp {{ color-scheme: light; }}
+.stApp {{ color:#1D2B3A; font-family:"Segoe UI", "Inter", Arial, sans-serif; }}
 .block-container {{ padding-top: 1rem; max-width: 1350px; }}
 section[data-testid="stSidebar"], div[data-testid="stSidebarCollapsedControl"], button[data-testid="stExpandSidebarButton"] {{ display:none !important; }}
 header[data-testid='stHeader'] {{ background: transparent; }}
-h2, h3, h4 {{ color: {NAVY}; }}
-.hero {{ background: linear-gradient(120deg, {NAVY} 0%, {BLUE} 60%, {TEAL} 100%); border-radius: 22px; padding: 26px 32px;
-    color:#fff; display:flex; align-items:center; gap:28px; flex-wrap:wrap; border-bottom:6px solid {GOLD};
-    box-shadow:0 10px 30px rgba(11,42,74,.30); }}
-.hero img.pf, .hero .avatar {{ width:130px; height:130px; border-radius:50%; object-fit:cover; border:5px solid {GOLD}; background:#fff; flex-shrink:0; }}
-.hero .avatar {{ display:flex; align-items:center; justify-content:center; font-size:46px; font-weight:800; color:{NAVY}; }}
-.hero img.lg {{ width:92px; height:92px; object-fit:contain; background:#fff; border-radius:50%; padding:6px; border:4px solid {GOLD}; flex-shrink:0; }}
-.badge {{ background:{GOLD}; color:{NAVY}; font-weight:800; letter-spacing:1px; padding:4px 14px; border-radius:999px; font-size:12.5px; display:inline-block; }}
-.hero h1 {{ margin:8px 0 4px 0; font-size:30px; color:#fff; line-height:1.15; }}
-.hero p.sub {{ margin:0 0 12px 0; opacity:.9; font-size:14.5px; }}
-.chips span {{ display:inline-block; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.28); padding:5px 13px; border-radius:12px; margin:0 8px 6px 0; font-size:13.5px; }}
-.chips b {{ color:{GOLD}; }}
+h1, h2, h3, h4, h5 {{ color:{NAVY}; letter-spacing:-.2px; }}
+h3 {{ font-weight:800; }}
+h4 {{ font-weight:700; margin-top:.6rem; }}
+
+/* ---------- HERO (halaman analisis) ---------- */
+.hero {{ background: linear-gradient(120deg, #EAF3FF 0%, #E8F6F8 100%); border:1px solid #D6E4F2; border-radius: 22px; padding: 24px 30px;
+    color:{NAVY}; display:flex; align-items:center; gap:26px; flex-wrap:wrap; border-bottom:6px solid {GOLD};
+    box-shadow:0 8px 24px rgba(20,87,143,.10); }}
+.hero img.pf, .hero .avatar {{ width:120px; height:120px; border-radius:50%; object-fit:cover; border:5px solid {TEAL}; background:#fff; flex-shrink:0; }}
+.hero .avatar {{ display:flex; align-items:center; justify-content:center; font-size:42px; font-weight:800; color:{NAVY}; }}
+.hero img.lg {{ width:88px; height:88px; object-fit:contain; background:#fff; border-radius:50%; padding:6px; border:3px solid {GOLD}; flex-shrink:0; }}
+.badge {{ background:{GOLD}; color:{NAVY}; font-weight:800; letter-spacing:1px; padding:4px 14px; border-radius:999px; font-size:12px; display:inline-block; }}
+.hero h1 {{ margin:8px 0 4px 0; font-size:28px; color:{NAVY}; line-height:1.2; }}
+.hero p.sub {{ margin:0 0 12px 0; color:#4A5B6E; font-size:14.5px; }}
+.chips span {{ display:inline-block; background:#fff; color:{NAVY}; border:1px solid #D6E4F2; padding:5px 13px; border-radius:12px; margin:0 8px 6px 0; font-size:13.5px; }}
+.chips b {{ color:{BLUE}; }}
+
+/* ---------- KPI ---------- */
 .kpi {{ background:#fff; border-radius:16px; padding:14px 16px; border:1px solid #E3E9F1; border-left:6px solid {TEAL};
-    box-shadow:0 3px 12px rgba(20,87,143,.08); height:100%; }}
-.kpi .lbl {{ font-size:12px; color:#5B6B7F; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }}
+    box-shadow:0 3px 12px rgba(20,87,143,.07); height:100%; transition:transform .15s ease, box-shadow .15s ease; }}
+.kpi:hover {{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(20,87,143,.14); }}
+.kpi .lbl {{ font-size:11.5px; color:#5B6B7F; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }}
 .kpi .val {{ font-size:24px; font-weight:800; color:{NAVY}; line-height:1.25; }}
-.kpi .sub {{ font-size:12px; color:#7B8A9C; }}
+.kpi .sub {{ font-size:12px; color:#6B7B8E; }}
 .kpi.gold {{ border-left-color:{GOLD}; }} .kpi.blue {{ border-left-color:{BLUE}; }} .kpi.red {{ border-left-color:{C['red']}; }}
 .kpi.green {{ border-left-color:{C['green']}; }} .kpi.pink {{ border-left-color:{C['pink']}; }} .kpi.purple {{ border-left-color:{C['purple']}; }}
 .kpi.orange {{ border-left-color:{C['orange']}; }}
-.note {{ background:#FFF8E1; border-left:5px solid {GOLD}; padding:12px 16px; border-radius:10px; color:#4A3B00; }}
-.ok {{ background:#E8F6EC; border-left:5px solid {C['green']}; padding:12px 16px; border-radius:10px; color:#14471E; }}
-.info {{ background:#E8F1FA; border-left:5px solid {BLUE}; padding:12px 16px; border-radius:10px; color:{NAVY}; }}
-.warn {{ background:#FDECEA; border-left:5px solid {C['red']}; padding:12px 16px; border-radius:10px; color:#5A1A0E; }}
-div[data-testid="stTabs"] button {{ font-weight:700; }}
+
+/* ---------- KOTAK INFO ---------- */
+.note {{ background:#FFF8E1; border-left:5px solid {GOLD}; padding:12px 16px; border-radius:12px; color:#4A3B00; line-height:1.55; }}
+.ok {{ background:#E8F6EC; border-left:5px solid {C['green']}; padding:12px 16px; border-radius:12px; color:#14471E; line-height:1.55; }}
+.info {{ background:#E8F1FA; border-left:5px solid {BLUE}; padding:12px 16px; border-radius:12px; color:{NAVY}; line-height:1.55; }}
+.warn {{ background:#FDECEA; border-left:5px solid {C['red']}; padding:12px 16px; border-radius:12px; color:#5A1A0E; line-height:1.55; }}
+.tip {{ background:linear-gradient(90deg,#F1F8FF,#F0FAF9); border:1px dashed #9CC4E4; border-radius:14px; padding:10px 16px; color:{NAVY}; font-size:14px; }}
+.tip b {{ color:{BLUE}; }}
+
+/* ---------- TAB / TOMBOL / INPUT ---------- */
+div[data-testid="stTabs"] [role="tablist"] {{ gap:6px; flex-wrap:wrap; border-bottom:2px solid #E3E9F1; }}
+div[data-testid="stTabs"] button[role="tab"] {{ font-weight:700; color:#4A5B6E; background:#F1F6FB; border-radius:12px 12px 0 0; padding:8px 14px; }}
+div[data-testid="stTabs"] button[role="tab"]:hover {{ background:#E3EEF9; color:{NAVY}; }}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{ background:#fff; color:{BLUE}; box-shadow:inset 0 -3px 0 {GOLD}; }}
+div.stButton > button, div.stDownloadButton > button, div[data-testid="stFormSubmitButton"] > button {{ border-radius:12px; font-weight:700; border:1px solid #C9D9EA; background:#fff; color:{NAVY};
+    transition:all .15s ease; }}
+div.stButton > button:hover, div.stDownloadButton > button:hover {{ border-color:{BLUE}; color:{BLUE}; background:#F3F8FD; transform:translateY(-1px); }}
+div.stButton > button[kind="primary"], div[data-testid="stFormSubmitButton"] > button[kind="primaryFormSubmit"], div[data-testid="stFormSubmitButton"] > button[kind="primary"] {{
+    background:linear-gradient(90deg,{BLUE},{TEAL}); color:#fff; border:none; box-shadow:0 4px 12px rgba(20,87,143,.25); }}
+div.stButton > button[kind="primary"]:hover {{ color:#fff; filter:brightness(1.06); }}
+div[data-testid="stExpander"] {{ border:1px solid #E3E9F1; border-radius:14px; background:#FBFDFF; }}
+div[data-testid="stExpander"] summary p {{ font-weight:700; color:{NAVY}; }}
+div[data-testid="stVerticalBlockBorderWrapper"] {{ border-radius:16px; }}
+[data-testid="stFileUploader"] section {{ border:2px dashed {TEAL}; background:{LIGHT}; border-radius:14px; }}
+
+/* ---------- ALUR / LANGKAH ---------- */
 .flow {{ display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 14px 0; }}
-.step {{ flex:1; min-width:120px; background:linear-gradient(160deg,{NAVY},{BLUE}); color:#fff; padding:12px 14px; border-radius:14px; text-align:center; }}
-.step .n {{ background:{GOLD}; color:{NAVY}; font-weight:800; width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; margin-bottom:5px; }}
-.step .t {{ font-weight:700; font-size:14px; }} .step .d {{ font-size:11.5px; opacity:.85; }}
-.seg {{ border-radius:18px; padding:16px 18px; color:#fff; height:100%; box-shadow:0 6px 18px rgba(0,0,0,.16); }}
-.seg h4 {{ margin:0 0 2px 0; color:#fff; font-size:19px; }}
-.seg .tag {{ font-size:11.5px; opacity:.88; margin-bottom:8px; letter-spacing:.5px; text-transform:uppercase; }}
-.seg .big {{ font-size:28px; font-weight:800; line-height:1.1; }}
-.seg .mini {{ font-size:12.5px; opacity:.95; margin:2px 0 8px 0; }}
-.seg ul {{ margin:6px 0 0 0; padding-left:18px; font-size:13px; line-height:1.5; }}
+.step {{ flex:1; min-width:120px; background:#fff; border:1px solid #D6E4F2; border-top:4px solid {GOLD}; color:{NAVY}; padding:12px 14px; border-radius:14px; text-align:center;
+    box-shadow:0 3px 10px rgba(20,87,143,.06); }}
+.step .n {{ background:{BLUE}; color:#fff; font-weight:800; width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; margin-bottom:5px; }}
+.step .t {{ font-weight:700; font-size:14px; color:{NAVY}; }} .step .d {{ font-size:11.5px; color:#5B6B7F; }}
+
+/* ---------- KARTU SEGMEN ---------- */
+.seg {{ --sc:{TEAL}; background:#fff; border:1px solid #E3E9F1; border-top:6px solid var(--sc); border-radius:18px; padding:16px 18px; color:#1D2B3A; height:100%;
+    box-shadow:0 5px 16px rgba(20,87,143,.09); }}
+.seg h4 {{ margin:0 0 2px 0; color:var(--sc); font-size:19px; }}
+.seg .tag {{ font-size:11.5px; color:#5B6B7F; margin-bottom:8px; letter-spacing:.5px; text-transform:uppercase; font-weight:700; }}
+.seg .big {{ font-size:28px; font-weight:800; line-height:1.1; color:{NAVY}; }}
+.seg .mini {{ font-size:12.5px; color:#4A5B6E; margin:2px 0 8px 0; }}
+.seg ul {{ margin:6px 0 0 0; padding-left:18px; font-size:13px; line-height:1.55; color:#33475B; }}
 .seg .rfm {{ display:flex; gap:8px; margin:8px 0; }}
-.seg .rfm div {{ flex:1; background:rgba(255,255,255,.18); border-radius:10px; padding:6px 8px; text-align:center; }}
-.seg .rfm b {{ display:block; font-size:15px; }} .seg .rfm span {{ font-size:10.5px; opacity:.9; }}
-.brandbar {{ font-weight:700; padding-top:8px; font-size:15px; }}
-.uhero {{ background:linear-gradient(120deg, rgba(11,42,74,.90), rgba(20,87,143,.82)); border-radius:22px; padding:30px 34px; color:#fff;
-    display:flex; align-items:center; gap:28px; flex-wrap:wrap; border-bottom:6px solid {GOLD}; box-shadow:0 10px 30px rgba(0,0,0,.35); backdrop-filter:blur(4px); }}
-.uhero img.logo {{ width:130px; height:130px; object-fit:contain; background:#fff; border-radius:50%; padding:8px; border:5px solid {GOLD}; flex-shrink:0; }}
-.uhero .emoji {{ font-size:90px; }}
-.uhero h1 {{ margin:8px 0 4px 0; font-size:38px; color:#fff; line-height:1.12; }}
-.uhero p {{ margin:0; opacity:.92; font-size:16px; }}
-.sec-title {{ color:#fff; font-size:22px; font-weight:800; margin:26px 0 10px 0; text-shadow:0 2px 8px rgba(0,0,0,.5); }}
+.seg .rfm div {{ flex:1; background:#F1F6FB; border-radius:10px; padding:6px 8px; text-align:center; }}
+.seg .rfm b {{ display:block; font-size:15px; color:{NAVY}; }} .seg .rfm span {{ font-size:10.5px; color:#5B6B7F; }}
+
+.brandbar {{ font-weight:700; padding-top:8px; font-size:15px; color:{NAVY}; }}
+
+/* ---------- BERANDA ---------- */
+.uhero {{ background:rgba(255,255,255,.94); border:1px solid #D6E4F2; border-radius:22px; padding:28px 32px; color:{NAVY};
+    display:flex; align-items:center; gap:26px; flex-wrap:wrap; border-bottom:6px solid {GOLD}; box-shadow:0 10px 28px rgba(20,87,143,.14); }}
+.uhero img.logo {{ width:120px; height:120px; object-fit:contain; background:#fff; border-radius:50%; padding:8px; border:4px solid {GOLD}; flex-shrink:0; }}
+.uhero .emoji {{ font-size:84px; }}
+.uhero h1 {{ margin:8px 0 4px 0; font-size:36px; color:{NAVY}; line-height:1.12; }}
+.uhero p {{ margin:0; color:#4A5B6E; font-size:16px; }}
+.sec-title {{ color:{NAVY}; font-size:22px; font-weight:800; margin:26px 0 10px 0; padding-left:12px; border-left:6px solid {GOLD}; }}
 .grid {{ display:grid; grid-template-columns:repeat(auto-fit, minmax(230px,1fr)); gap:14px; }}
-.glass {{ background:rgba(255,255,255,.95); border-radius:18px; padding:18px 20px; color:#1D2B3A; box-shadow:0 6px 20px rgba(0,0,0,.25); border-top:5px solid {TEAL}; }}
+.glass {{ background:#fff; border:1px solid #E3E9F1; border-radius:18px; padding:18px 20px; color:#1D2B3A; box-shadow:0 5px 16px rgba(20,87,143,.09); border-top:5px solid {TEAL}; }}
 .glass.gold {{ border-top-color:{GOLD}; }} .glass.blue {{ border-top-color:{BLUE}; }} .glass.pink {{ border-top-color:{C['pink']}; }} .glass.purple {{ border-top-color:{C['purple']}; }}
 .glass .ic {{ font-size:28px; }} .glass h4 {{ margin:6px 0 6px 0; color:{NAVY}; font-size:16px; }}
-.glass p {{ margin:0; font-size:14px; line-height:1.5; color:#33475B; }}
-.stat {{ background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.35); border-radius:16px; padding:16px; text-align:center; color:#fff; backdrop-filter:blur(4px); }}
-.stat .v {{ font-size:26px; font-weight:800; color:{GOLD}; }} .stat .l {{ font-size:13px; opacity:.92; }}
+.glass p {{ margin:0; font-size:14px; line-height:1.55; color:#33475B; }}
+.stat {{ background:#fff; border:1px solid #D6E4F2; border-radius:16px; padding:16px; text-align:center; color:{NAVY}; box-shadow:0 4px 12px rgba(20,87,143,.08); }}
+.stat .v {{ font-size:26px; font-weight:800; color:{BLUE}; }} .stat .l {{ font-size:13px; color:#5B6B7F; }}
 a.lnk {{ display:inline-block; background:{NAVY}; color:#fff !important; text-decoration:none; padding:8px 16px; border-radius:10px; font-weight:700; font-size:14px; margin:6px 8px 0 0; }}
-.foot {{ text-align:center; color:rgba(255,255,255,.85); font-size:13px; margin:28px 0 6px 0; }}
-[data-testid="stFileUploader"] section {{ border:2px dashed {TEAL}; background:{LIGHT}; border-radius:14px; }}
+.foot {{ text-align:center; color:#6B7B8E; font-size:13px; margin:28px 0 6px 0; }}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -161,7 +206,8 @@ def kpi(label, value, sub="", cls=""):
 
 def show_chart(fig, height=None):
     fig.update_layout(template="plotly_white", margin=dict(l=10, r=10, t=55, b=10),
-                      font=dict(family="Segoe UI, Arial", size=13), title_font=dict(size=16, color=NAVY))
+                      font=dict(family="Segoe UI, Arial", size=13, color="#1D2B3A"), title_font=dict(size=16, color=NAVY),
+                      paper_bgcolor="rgba(0,0,0,0)")
     if height:
         fig.update_layout(height=height)
     try:
@@ -265,12 +311,12 @@ def get_foto():
 def bg_css(panel: bool):
     p = find_asset(["bg_unimor.jpg", "bg_unimor.jpeg", "bg_unimor.png", "bg_unimor.webp", "background.jpg", "background.png"])
     img = load_bg(str(p), p.stat().st_mtime) if p else None
-    ov = "linear-gradient(135deg, rgba(11,42,74,.88) 0%, rgba(20,87,143,.74) 55%, rgba(29,154,166,.60) 100%)"
-    bg = f'{ov}, url("{img}")' if img else f"linear-gradient(135deg, {NAVY} 0%, {BLUE} 55%, {TEAL} 100%)"
+    ov = "linear-gradient(135deg, rgba(246,250,254,.94) 0%, rgba(235,244,251,.92) 55%, rgba(232,246,246,.90) 100%)"
+    bg = f'{ov}, url("{img}")' if img else "linear-gradient(135deg, #F6FAFE 0%, #EAF3FA 55%, #E8F6F6 100%)"
     css = f".stApp {{ background:{bg}; background-size:cover; background-position:center; background-attachment:fixed; }}"
     if panel:  # halaman analisis: isi dalam panel putih agar grafik terbaca jelas
-        css += (".block-container { background:rgba(255,255,255,.965); border-radius:24px; margin-top:14px; margin-bottom:14px;"
-                " padding:1.2rem 2rem 2rem 2rem !important; box-shadow:0 14px 40px rgba(0,0,0,.35); }")
+        css += (".block-container { background:#FFFFFF; border:1px solid #E3E9F1; border-radius:24px; margin-top:14px; margin-bottom:14px;"
+                " padding:1.2rem 2rem 2rem 2rem !important; box-shadow:0 10px 34px rgba(20,87,143,.12); }")
     return f"<style>{css}</style>"
 
 
@@ -279,13 +325,111 @@ def logo_html(cls="logo"):
     return f'<img class="{cls}" src="{lg}" alt="Logo UNIMOR">' if lg else '<div class="emoji">🎓</div>'
 
 
+# ----------------------------------------------------------------------------
+# LOGIN
+# ----------------------------------------------------------------------------
+st.session_state.setdefault("auth", False)
+st.session_state.setdefault("auth_user", "")
+st.session_state.setdefault("login_error", "")
 st.session_state.setdefault("page", "beranda")
 
+LOGIN_CSS = f"""
+<style>
+.block-container {{ padding-top:2.2rem; max-width:1100px; }}
+.lg-brand {{ text-align:center; margin-bottom:14px; }}
+.lg-brand .badge {{ background:{GOLD}; color:{NAVY}; font-weight:800; letter-spacing:1px; padding:4px 14px;
+    border-radius:999px; font-size:12px; display:inline-block; }}
+.lg-brand h2 {{ color:{NAVY}; margin:10px 0 2px 0; font-size:28px; line-height:1.15; }}
+.lg-brand p {{ margin:0; color:#4A5B6E; font-size:14px; }}
+.lg-profile {{ background:#fff; border:1px solid #D6E4F2; border-bottom:none; border-radius:22px 22px 0 0; padding:22px 24px 16px 24px; text-align:center;
+    border-top:6px solid {GOLD}; box-shadow:0 12px 32px rgba(20,87,143,.14); }}
+.lg-profile .imgs {{ display:flex; justify-content:center; align-items:center; gap:14px; margin-bottom:10px; }}
+.lg-profile img.logo {{ width:70px; height:70px; object-fit:contain; background:#fff; border-radius:50%; padding:5px; border:3px solid {GOLD}; }}
+.lg-profile img.pf, .lg-profile .avatar {{ width:108px; height:108px; border-radius:50%; object-fit:cover; border:5px solid {TEAL}; background:#fff; }}
+.lg-profile .avatar {{ display:inline-flex; align-items:center; justify-content:center; font-size:38px; font-weight:800; color:{NAVY}; }}
+.lg-profile h3 {{ margin:6px 0 2px 0; color:{NAVY}; font-size:22px; }}
+.lg-profile .sub {{ color:#5B6B7F; font-size:13.5px; margin-bottom:10px; }}
+.lg-profile .chips span {{ display:inline-block; background:#EAF2FB; color:{NAVY}; border:1px solid #D3E2F3;
+    padding:4px 12px; border-radius:12px; margin:0 4px 6px 0; font-size:12.5px; }}
+.lg-profile .chips b {{ color:{BLUE}; }}
+div[data-testid="stForm"] {{ background:#fff; border:1px solid #D6E4F2; border-top:none; border-radius:0 0 22px 22px;
+    padding:6px 24px 20px 24px; box-shadow:0 12px 32px rgba(20,87,143,.14); }}
+div[data-testid="stForm"] label p {{ font-weight:700; color:{NAVY}; }}
+.lg-hint {{ text-align:center; margin-top:14px; color:#4A5B6E; font-size:12.5px; }}
+.lg-hint code {{ background:#FFF3C4; color:#6B4E00; padding:2px 8px; border-radius:8px; font-size:12px; }}
+.lg-foot {{ text-align:center; color:#6B7B8E; font-size:12px; margin-top:18px; }}
+</style>
+"""
 
+
+def check_login(user: str, pwd: str) -> bool:
+    ok_u = hmac.compare_digest(user.strip().lower().encode(), AUTH_USER.encode())
+    ok_p = hmac.compare_digest(pwd.encode(), AUTH_PASS.encode())
+    return ok_u and ok_p
+
+
+def logout():
+    st.session_state.auth = False
+    st.session_state.auth_user = ""
+    st.session_state.login_error = ""
+    st.session_state.page = "beranda"
+    do_rerun()
+
+
+def render_login():
+    st.markdown(bg_css(False), unsafe_allow_html=True)
+    st.markdown(LOGIN_CSS, unsafe_allow_html=True)
+    lg_, ft_ = get_logo(), get_foto()
+    inisial_ = "".join(w[0] for w in nama.split()[:2]).upper()
+    img_logo = f'<img class="logo" src="{lg_}" alt="Logo UNIMOR">' if lg_ else ""
+    img_foto = f'<img class="pf" src="{ft_}" alt="Foto {nama}">' if ft_ else f'<div class="avatar">{inisial_}</div>'
+    _, mid, _ = st.columns([1, 1.5, 1])
+    with mid:
+        st.markdown('<div class="lg-brand"><span class="badge">LOGIN • UTS BUSINESS INTELLIGENCE</span>'
+                    "<h2>📊 Analisis Transaksi Toko</h2><p>Universitas Timor (UNIMOR)</p></div>", unsafe_allow_html=True)
+        # profil mahasiswa
+        st.markdown(f'<div class="lg-profile"><div class="imgs">{img_logo}{img_foto}</div>'
+                    f"<h3>{nama}</h3><div class=\"sub\">Mahasiswa • Mata kuliah {matkul}</div>"
+                    f'<div class="chips"><span>🆔 <b>NPM</b> : {npm}</span><span>🏫 <b>Kelas</b> : {kelas.replace("Kelas ", "")}</span>'
+                    f"<span>📘 <b>{semester}</b></span></div></div>", unsafe_allow_html=True)
+        # form login
+        with st.form("form_login", clear_on_submit=False):
+            user = st.text_input("👤 Username", placeholder="Masukkan username")
+            pwd = st.text_input("🔒 Password", type="password", placeholder="Masukkan password")
+            go_ = stretch(st.form_submit_button, "🔐 Masuk", type="primary")
+        if go_:
+            if not user.strip() or not pwd:
+                st.session_state.login_error = "Username dan password wajib diisi."
+            elif check_login(user, pwd):
+                st.session_state.auth = True
+                st.session_state.auth_user = user.strip().lower()
+                st.session_state.login_error = ""
+                st.session_state.page = "beranda"
+                do_rerun()
+            else:
+                st.session_state.login_error = "Username atau password salah. Silakan coba lagi."
+        if st.session_state.login_error:
+            st.error(st.session_state.login_error, icon="🚫")
+        # keterangan kecil di bawah login
+        st.markdown(f'<div class="lg-hint">ℹ️ Akun demo &nbsp;•&nbsp; Username: <code>{AUTH_USER}</code> '
+                    f'&nbsp;•&nbsp; Password: <code>{AUTH_PASS}</code></div>'
+                    f'<div class="lg-foot">© Universitas Timor • {matkul} • {nama} ({npm})</div>', unsafe_allow_html=True)
+
+
+if not st.session_state.auth:
+    render_login()
+    st.stop()
+
+
+# ----------------------------------------------------------------------------
+# TOPBAR & BERANDA
+# ----------------------------------------------------------------------------
 def topbar(dark):
-    color = "#fff" if dark else NAVY
-    c1, c2 = st.columns([7, 1.6])
-    c1.markdown(f'<div class="brandbar" style="color:{color}">🎓 UNIMOR &nbsp;•&nbsp; UTS {matkul} &nbsp;•&nbsp; {nama} ({npm})</div>', unsafe_allow_html=True)
+    color = NAVY
+    c1, c2, c3 = st.columns([6.2, 1.5, 1.2])
+    c1.markdown(f'<div class="brandbar" style="color:{color}">🎓 UNIMOR &nbsp;•&nbsp; UTS {matkul} &nbsp;•&nbsp; {nama} ({npm}) &nbsp;•&nbsp; 👤 {st.session_state.auth_user}</div>', unsafe_allow_html=True)
+    if stretch(c3.button, "🚪 Keluar", key="nav_logout"):
+        logout()
     if st.session_state.page == "analisis":
         if stretch(c2.button, "🏠 Beranda", key="nav_home"):
             st.session_state.page = "beranda"
@@ -329,6 +473,12 @@ def render_beranda():
                 "<p>Sistem ini mengubah data transaksi toko menjadi informasi: kualitas data, pola kombinasi produk (Apriori), "
                 "segmentasi pelanggan (RFM + K-Means), dashboard interaktif, dan rekomendasi keputusan bisnis. "
                 "Klik tombol di bawah untuk mulai.</p></div>", unsafe_allow_html=True)
+    st.markdown('<div class="sec-title">🧭 Cara Menggunakan</div>', unsafe_allow_html=True)
+    how = [("1️⃣", "Siapkan data", "Letakkan file Excel di folder program atau upload di halaman Analisis.", "blue"),
+           ("2️⃣", "Jelajahi 7 tab", "Ikuti urutan tab dari Business Understanding sampai Rekomendasi.", "gold"),
+           ("3️⃣", "Atur & filter", "Ubah parameter Apriori, K-Means, dan filter dashboard sesuai kebutuhan.", "pink"),
+           ("4️⃣", "Unduh hasil", "Simpan dataset bersih dan seluruh hasil analisis dalam format Excel.", "purple")]
+    st.markdown('<div class="grid">' + "".join(f'<div class="glass {c}"><div class="ic">{i}</div><h4>{t}</h4><p>{d}</p></div>' for i, t, d, c in how) + "</div>", unsafe_allow_html=True)
     st.write("")
     _, mid, _ = st.columns([1, 1.2, 1])
     with mid:
@@ -716,6 +866,9 @@ st.markdown(
     f'<div class="chips"><span>👤 <b>Nama</b> : {nama}</span><span>🆔 <b>NPM</b> : {npm}</span>'
     f"<span>🏫 <b>Kelas</b> : {kelas}</span><span>📘 <b>Semester</b> : {semester}</span></div></div></div>",
     unsafe_allow_html=True)
+st.markdown('<div class="tip" style="margin-top:12px">💡 <b>Panduan cepat:</b> (1) data dibaca otomatis atau upload Excel di bawah → '
+            '(2) buka <b>7 tab</b> secara berurutan dari kiri ke kanan → (3) atur filter di <b>Tab 6</b> dan parameter di <b>Tab 4 & 5</b> → '
+            '(4) unduh hasil di akhir <b>Tab 7</b>.</div>', unsafe_allow_html=True)
 st.write("")
 
 default_path = next((APP_DIR / n for n in DEFAULT_FILE_NAMES if (APP_DIR / n).exists()), None)
@@ -1270,7 +1423,7 @@ with tabs[4]:
     cols = st.columns(len(prof))
     for c, (_, r) in zip(cols, prof.iterrows()):
         c.markdown(
-            f'<div class="seg" style="background:linear-gradient(160deg,{SEG_COLORS[r.Segmen]},{NAVY})"><div class="tag">Klaster {int(r.Cluster)}</div>'
+            f'<div class="seg" style="--sc:{SEG_COLORS[r.Segmen]}"><div class="tag">Klaster {int(r.Cluster)}</div>'
             f'<h4>{SEG_ICON[r.Basis]} {r.Segmen}</h4><div class="big">{angka(r.Jumlah)}</div>'
             f'<div class="mini">pelanggan • {r.Pct_Pelanggan:.1%} basis • {r.Pct_Revenue:.1%} revenue</div>'
             f'<div class="rfm"><div><b>{dec(r.Avg_Recency, 0)}</b><span>Recency (hari)</span></div><div><b>{dec(r.Avg_Frequency, 1)}</b><span>Frequency</span></div>'
@@ -1307,7 +1460,7 @@ with tabs[4]:
     sc = st.columns(len(prof))
     for c, (_, r) in zip(sc, prof.iterrows()):
         jud, aksi = STRATEGI[r.Basis]
-        c.markdown(f'<div class="seg" style="background:linear-gradient(160deg,{SEG_COLORS[r.Segmen]},{NAVY})"><div class="tag">{angka(r.Jumlah)} pelanggan • {r.Pct_Revenue:.0%} revenue</div>'
+        c.markdown(f'<div class="seg" style="--sc:{SEG_COLORS[r.Segmen]}"><div class="tag">{angka(r.Jumlah)} pelanggan • {r.Pct_Revenue:.0%} revenue</div>'
                    f'<h4>{SEG_ICON[r.Basis]} {r.Segmen}</h4><div class="mini"><b>{jud}</b></div><ul>{"".join(f"<li>{a}</li>" for a in aksi)}</ul></div>', unsafe_allow_html=True)
     st.write("")
     sec("8e • Segmen prioritas")
@@ -1581,13 +1734,6 @@ with tabs[6]:
     z3.markdown(kpi("Estimasi manfaat bersih", rp_short(est["Estimasi manfaat bersih"].sum()), "tambahan revenue − biaya (belum margin)", "blue"), unsafe_allow_html=True)
     st.markdown('<div class="warn" style="margin-top:10px"><b>Catatan:</b> angka di atas hanya <b>estimasi</b> dari asumsi (bukan hasil data). Tambahan revenue belum dikurangi HPP; dampak aktual hanya dapat dipastikan lewat uji coba (A/B test) dan pengukuran setelah implementasi.</div>', unsafe_allow_html=True)
 
-    # =====================================================================
-    # PENGGANTI: sec("e. Rencana implementasi") s.d. tabel KPI (sec "f")
-    # Letakkan di dalam `with tabs[6]:`, tepat setelah tabel "Estimasi dampak"
-    # dan sebelum st.write("") + "#### 📥 Unduh luaran".
-    # Variabel yang dipakai sudah ada di program: acc, react, upl, cost_c, est,
-    # pairs_u, prof, rfm, df, tx, Bm, total_rev, avg_basket, n_cust, BULAN, base_label.
-    # =====================================================================
     sec("e. Rencana implementasi (setiap tindakan dibuktikan dengan data)")
     st.markdown('<div class="info"><b>Cara membaca:</b> kolom <b>Dasar data</b> berisi angka yang dihitung langsung dari dataset (🟦). '
                 'Kolom <b>Target</b> adalah sasaran yang ditetapkan dari asumsi di atas (🟨), bukan hasil data. '
